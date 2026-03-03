@@ -9,7 +9,7 @@ from typing import Dict, List, Set, Tuple
 
 from agent_bench.dataset import Problem, load_dataset_by_name
 from agent_bench.report import render_report
-from agent_bench.runner import build_prompt, run_agent
+from agent_bench.runner import build_prompt, run_agent, set_start_stagger
 
 DEFAULT_HEADER = [
     "timestamp",
@@ -58,6 +58,12 @@ def main() -> None:
         nargs="+",
         help="Resume a run from one or more CSV files",
     )
+    parser.add_argument(
+        "--agent-start-stagger",
+        type=float,
+        default=5.0,
+        help="Minimum seconds between starting agent processes (default: 5)",
+    )
     parser.add_argument("--limit", type=int, default=None, help="Limit to first N questions")
     parser.add_argument("--quiet", action="store_true", help="Suppress markdown output")
     parser.add_argument("--results-dir", default="reports", help="Directory for CSV outputs")
@@ -74,6 +80,8 @@ def main() -> None:
         markdown = render_report(report_paths)
         print(markdown)
         return
+
+    set_start_stagger(args.agent_start_stagger)
 
     if args.resume:
         _resume_runs(args)

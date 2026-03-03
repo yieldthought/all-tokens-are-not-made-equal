@@ -4,6 +4,8 @@ import json
 import os
 import re
 import subprocess
+import threading
+import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -16,6 +18,28 @@ class AgentResult:
     session_id: str
     request_id: str
     duration_ms: Optional[int]
+
+
+_START_LOCK = threading.Lock()
+_LAST_START = 0.0
+_MIN_START_GAP = 5.0
+
+
+def set_start_stagger(seconds: float) -> None:
+    global _MIN_START_GAP
+    _MIN_START_GAP = max(0.0, seconds)
+
+
+def _throttle_start() -> None:
+    global _LAST_START
+    if _MIN_START_GAP <= 0:
+        return
+    with _START_LOCK:
+        now = time.monotonic()
+        wait = _MIN_START_GAP - (now - _LAST_START)
+        if wait > 0:
+            time.sleep(wait)
+        _LAST_START = time.monotonic()
 
 
 def build_prompt(problem_text: str, question_id: str) -> str:
@@ -32,6 +56,7 @@ def build_prompt(problem_text: str, question_id: str) -> str:
 
 
 def run_agent(model: str, prompt: str) -> AgentResult:
+    _throttle_start()
     cmd = [
         "agent",
         "--print",

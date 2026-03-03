@@ -65,6 +65,12 @@ Resume a partial run:
 ```bash
 agent-bench --resume reports/aime24-gpt-5.3-codex-20260303-120000.csv
 ```
+
+If you see CLI startup race conditions, you can stagger agent process starts:
+
+```bash
+agent-bench --models gpt-5.3-codex-xhigh --agent-start-stagger 5
+```
 ```
 
 ## Output
