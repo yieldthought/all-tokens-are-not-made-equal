@@ -69,6 +69,7 @@ def main() -> None:
     parser.add_argument("--results-dir", default="reports", help="Directory for CSV outputs")
     parser.add_argument("--list-models", action="store_true", help="List available models via agent")
     parser.add_argument("--report", nargs="+", help="Generate markdown report from CSV file(s)")
+    parser.add_argument("--no-color", action="store_true", help="Disable colored correctness markers")
 
     args = parser.parse_args()
 
@@ -77,7 +78,7 @@ def main() -> None:
 
     if args.report:
         report_paths = [Path(p) for p in args.report]
-        markdown = render_report(report_paths)
+        markdown = render_report(report_paths, use_color=not args.no_color)
         print(markdown)
         return
 
@@ -150,7 +151,7 @@ def main() -> None:
 
     progress.close()
 
-    markdown = render_report(csv_paths)
+    markdown = render_report(csv_paths, use_color=not args.no_color)
     if not args.quiet:
         print(markdown)
     for path in csv_paths:
@@ -324,7 +325,7 @@ def _resume_runs(args: argparse.Namespace) -> None:
         raise
 
     progress.close()
-    markdown = render_report(resume_paths)
+    markdown = render_report(resume_paths, use_color=not args.no_color)
     if not args.quiet:
         print(markdown)
     for path in resume_paths:

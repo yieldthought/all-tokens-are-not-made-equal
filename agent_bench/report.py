@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import csv
+import re
 import statistics
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
+from wcwidth import wcswidth
 
 PLUS_MINUS = "\u00b1"
-CHECK = "\u2705"
-KEYCAP_SUFFIX = "\uFE0F\u20E3"
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+RESET = "\x1b[0m"
 
 
 @dataclass
@@ -28,18 +30,15 @@ class ReportTable:
     align: List[str]
 
     def to_markdown(self) -> str:
-        widths = [len(h) for h in self.headers]
+        widths = [display_width(h) for h in self.headers]
         for row in self.rows:
             for i, cell in enumerate(row):
-                widths[i] = max(widths[i], len(cell))
+                widths[i] = max(widths[i], display_width(cell))
 
         def fmt_row(values: List[str]) -> str:
             padded = []
             for i, cell in enumerate(values):
-                if self.align[i] == "right":
-                    padded.append(cell.rjust(widths[i]))
-                else:
-                    padded.append(cell.ljust(widths[i]))
+                padded.append(pad_display(cell, widths[i], self.align[i]))
             return "| " + " | ".join(padded) + " |"
 
         header = fmt_row(self.headers)
@@ -78,7 +77,11 @@ def load_stats(csv_path: Path) -> Tuple[str, Dict[str, QuestionStats]]:
     return model_name, stats
 
 
-def build_table(stats_by_model: List[Tuple[str, Dict[str, QuestionStats]]]) -> ReportTable:
+def build_table(
+    stats_by_model: List[Tuple[str, Dict[str, QuestionStats]]],
+    *,
+    use_color: bool,
+) -> ReportTable:
     if not stats_by_model:
         raise ValueError("No CSV data provided")
 
@@ -107,35 +110,112 @@ def build_table(stats_by_model: List[Tuple[str, Dict[str, QuestionStats]]]) -> R
             std_widths.append(1)
 
     for qid in all_ids:
-        row = [qid]
+        row = [_format_aime_id(qid)]
         for idx, (_, stats) in enumerate(stats_by_model):
-            cell = format_cell(stats.get(qid), mean_widths[idx], std_widths[idx])
+            cell = format_cell(stats.get(qid), mean_widths[idx], std_widths[idx], use_color=use_color)
             row.append(cell)
         rows.append(row)
 
     return ReportTable(headers=headers, rows=rows, align=align)
 
 
-def format_cell(stats: QuestionStats | None, mean_width: int, std_width: int) -> str:
+def format_cell(
+    stats: QuestionStats | None,
+    mean_width: int,
+    std_width: int,
+    *,
+    use_color: bool,
+) -> str:
     if stats is None:
         return "-"
     mean = int(round(stats.mean_tokens, 0))
     std = int(round(stats.std_tokens, 0))
-    suffix = correct_suffix(stats.correct_count, stats.runs)
+    suffix = correct_suffix(stats.correct_count, stats.runs, use_color=use_color)
     return f"{str(mean).rjust(mean_width)} {PLUS_MINUS} {str(std).rjust(std_width)} {suffix}"
 
 
-def correct_suffix(correct: int, runs: int) -> str:
-    if runs == 5 and correct == 5:
-        return CHECK
-    if 0 <= correct <= 9:
-        return f"{correct}{KEYCAP_SUFFIX}"
-    return str(correct)
+def correct_suffix(correct: int, runs: int, *, use_color: bool) -> str:
+    label = f"@ {correct}/{runs}"
+    if not use_color or runs <= 0:
+        return label
+    color = _color_for_ratio(correct, runs)
+    return f"@ \x1b[38;5;{color}m{correct}/{runs}{RESET}"
 
 
-def render_report(csv_paths: Iterable[Path]) -> str:
+def render_report(csv_paths: Iterable[Path], *, use_color: bool = True) -> str:
     stats_by_model: List[Tuple[str, Dict[str, QuestionStats]]] = []
     for path in csv_paths:
         stats_by_model.append(load_stats(path))
-    table = build_table(stats_by_model)
+    table = build_table(stats_by_model, use_color=use_color)
     return table.to_markdown()
+
+
+def display_width(text: str) -> int:
+    stripped = ANSI_RE.sub("", text)
+    width = wcswidth(stripped)
+    return width if width >= 0 else len(stripped)
+
+
+def pad_display(text: str, width: int, align: str) -> str:
+    current = display_width(text)
+    if current >= width:
+        return text
+    padding = " " * (width - current)
+    if align == "right":
+        return padding + text
+    return text + padding
+
+
+def _format_aime_id(qid: str) -> str:
+    parts = qid.split("-")
+    if len(parts) >= 3 and parts[0].isdigit():
+        year = parts[0]
+        part = parts[1]
+        num = parts[2]
+        if len(part) <= 2 and num.isdigit() and len(num) <= 2:
+            return f"{year}-{part.rjust(2)}-{num.rjust(2)}"
+    return qid
+
+
+HSV_S = 0.45
+HSV_V = 1.0
+
+
+def _color_for_ratio(correct: int, runs: int) -> int:
+    # HSV with fixed S/V and H varying from red (0) through yellow (60) to green (120).
+    if runs <= 0:
+        return 15
+    ratio = max(0.0, min(1.0, correct / runs))
+    hue = 120.0 * ratio  # 0=red, 60=yellow, 120=green
+    r, g, b = _hsv_to_rgb(hue, HSV_S, HSV_V)
+    return _rgb_to_ansi256(r, g, b)
+
+
+def _hsv_to_rgb(h: float, s: float, v: float) -> Tuple[float, float, float]:
+    h = h % 360.0
+    c = v * s
+    x = c * (1 - abs((h / 60.0) % 2 - 1))
+    m = v - c
+    if 0 <= h < 60:
+        rp, gp, bp = c, x, 0
+    elif 60 <= h < 120:
+        rp, gp, bp = x, c, 0
+    elif 120 <= h < 180:
+        rp, gp, bp = 0, c, x
+    elif 180 <= h < 240:
+        rp, gp, bp = 0, x, c
+    elif 240 <= h < 300:
+        rp, gp, bp = x, 0, c
+    else:
+        rp, gp, bp = c, 0, x
+    return rp + m, gp + m, bp + m
+
+
+def _rgb_to_ansi256(r: float, g: float, b: float) -> int:
+    # Map RGB [0,1] to ANSI 256-color cube (16-231).
+    def to_6(v: float) -> int:
+        return int(round(v * 5))
+
+    r6, g6, b6 = to_6(r), to_6(g), to_6(b)
+    r6, g6, b6 = max(0, min(5, r6)), max(0, min(5, g6)), max(0, min(5, b6))
+    return 16 + 36 * r6 + 6 * g6 + b6
