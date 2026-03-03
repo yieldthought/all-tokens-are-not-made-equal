@@ -38,24 +38,36 @@ agent-bench --model gpt-5.3-codex --runs 1 --limit 2
 Generate a report from a CSV:
 
 ```bash
-agent-bench --report results/aime24-gpt-5.3-codex-20260303-120000.csv
+agent-bench --report reports/aime24-gpt-5.3-codex-20260303-120000.csv
 ```
 
 Compare multiple models:
 
 ```bash
-agent-bench --report results/aime24-modelA-*.csv results/aime24-modelB-*.csv
+agent-bench --report reports/aime24-modelA-*.csv reports/aime24-modelB-*.csv
 
 Run multiple models in one command (single progress bar, one CSV per model):
 
 ```bash
 agent-bench --models gpt-5.3-codex,sonnet-4-thinking --runs 5
 ```
+
+Parallel runs per question (defaults to `--runs`, so all runs for a question execute concurrently):
+
+```bash
+agent-bench --model gpt-5.3-codex --runs 5 --concurrency 5
+```
+
+Resume a partial run:
+
+```bash
+agent-bench --resume reports/aime24-gpt-5.3-codex-20260303-120000.csv
+```
 ```
 
 ## Output
 
-Each run is recorded to a CSV in `results/` with:
+Each run is recorded to a CSV in `reports/` with:
 - per-run output tokens (`outputTokens`)
 - raw model response
 - parsed answer

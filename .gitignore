@@ -2,4 +2,4 @@ __pycache__/
 *.pyc
 .venv/
 agent_bench.egg-info/
-results/*.csv
+reports/*.csv
