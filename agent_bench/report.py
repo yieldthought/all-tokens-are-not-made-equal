@@ -122,7 +122,7 @@ def format_cell(stats: QuestionStats | None, mean_width: int, std_width: int) ->
     mean = int(round(stats.mean_tokens, 0))
     std = int(round(stats.std_tokens, 0))
     suffix = correct_suffix(stats.correct_count, stats.runs)
-    return f"{str(mean).rjust(mean_width)} {PLUS_MINUS} {str(std).rjust(std_width)} {suffix} "
+    return f"{str(mean).rjust(mean_width)} {PLUS_MINUS} {str(std).rjust(std_width)} {suffix}"
 
 
 def correct_suffix(correct: int, runs: int) -> str:
