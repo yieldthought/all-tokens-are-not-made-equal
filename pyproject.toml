@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=65.5", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-bench"
+version = "0.1.0"
+description = "Benchmark Cursor agent models on AIME24 with lm-eval questions."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{name = "moconnor"}]
+dependencies = [
+  "lm-eval==0.4.11",
+  "datasets>=2.16.0",
+  "tqdm>=4.66.0",
+]
+
+[project.scripts]
+agent-bench = "agent_bench.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["agent_bench"]
