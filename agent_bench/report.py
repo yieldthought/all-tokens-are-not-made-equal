@@ -25,6 +25,7 @@ class QuestionStats:
 class ReportTable:
     headers: List[str]
     rows: List[List[str]]
+    align: List[str]
 
     def to_markdown(self) -> str:
         widths = [len(h) for h in self.headers]
@@ -33,7 +34,12 @@ class ReportTable:
                 widths[i] = max(widths[i], len(cell))
 
         def fmt_row(values: List[str]) -> str:
-            padded = [values[i].ljust(widths[i]) for i in range(len(values))]
+            padded = []
+            for i, cell in enumerate(values):
+                if self.align[i] == "right":
+                    padded.append(cell.rjust(widths[i]))
+                else:
+                    padded.append(cell.ljust(widths[i]))
             return "| " + " | ".join(padded) + " |"
 
         header = fmt_row(self.headers)
@@ -83,25 +89,40 @@ def build_table(stats_by_model: List[Tuple[str, Dict[str, QuestionStats]]]) -> R
     all_ids.sort(key=lambda qid: primary_stats.get(qid, QuestionStats(qid, 1e12, 0, 0, 0)).mean_tokens)
 
     headers = ["ID"] + [name for name, _ in stats_by_model]
+    align = ["left"] + ["right"] * len(stats_by_model)
     rows: List[List[str]] = []
+
+    mean_widths: List[int] = []
+    std_widths: List[int] = []
+    for _, stats in stats_by_model:
+        if stats:
+            mean_widths.append(
+                max(len(str(int(round(item.mean_tokens, 0)))) for item in stats.values())
+            )
+            std_widths.append(
+                max(len(str(int(round(item.std_tokens, 0)))) for item in stats.values())
+            )
+        else:
+            mean_widths.append(1)
+            std_widths.append(1)
 
     for qid in all_ids:
         row = [qid]
-        for _, stats in stats_by_model:
-            cell = format_cell(stats.get(qid))
+        for idx, (_, stats) in enumerate(stats_by_model):
+            cell = format_cell(stats.get(qid), mean_widths[idx], std_widths[idx])
             row.append(cell)
         rows.append(row)
 
-    return ReportTable(headers=headers, rows=rows)
+    return ReportTable(headers=headers, rows=rows, align=align)
 
 
-def format_cell(stats: QuestionStats | None) -> str:
+def format_cell(stats: QuestionStats | None, mean_width: int, std_width: int) -> str:
     if stats is None:
         return "-"
     mean = int(round(stats.mean_tokens, 0))
     std = int(round(stats.std_tokens, 0))
     suffix = correct_suffix(stats.correct_count, stats.runs)
-    return f"{mean} {PLUS_MINUS} {std} {suffix}"
+    return f"{str(mean).rjust(mean_width)} {PLUS_MINUS} {str(std).rjust(std_width)} {suffix}"
 
 
 def correct_suffix(correct: int, runs: int) -> str:
