@@ -15,6 +15,8 @@ Requirements:
 - Cursor `agent` CLI installed and authenticated (`agent whoami` should work).
 - `CURSOR_API_KEY` or logged-in Cursor session.
 
+By default `agent-bench` runs `agent` with `--mode ask --sandbox enabled` to discourage tool use.
+
 ## Usage
 
 List models:

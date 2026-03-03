@@ -24,15 +24,27 @@ def build_prompt(problem_text: str, question_id: str) -> str:
         "Rules (must follow):\n"
         "- Do NOT use any tools, external resources, or code.\n"
         "- Do all math by hand.\n"
-        "- Provide ONLY the final answer as an integer from 0 to 999.\n"
-        "- Do NOT include any explanation, formatting, or extra text.\n\n"
+        "\n"
         f"Problem ({question_id}):\n"
         f"{problem_text}\n"
+        "Please reason step by step, and put your final answer within\\boxed\n"
     )
 
 
 def run_agent(model: str, prompt: str) -> AgentResult:
-    cmd = ["agent", "--print", "--output-format", "json", "--model", model, prompt]
+    cmd = [
+        "agent",
+        "--print",
+        "--output-format",
+        "json",
+        "--model",
+        model,
+        "--mode",
+        "ask",
+        "--sandbox",
+        "enabled",
+        prompt,
+    ]
     env = os.environ.copy()
     # Keep locale stable to avoid shell warnings in some environments.
     env.setdefault("LC_ALL", "en_US.UTF-8")
