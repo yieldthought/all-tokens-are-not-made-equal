@@ -81,6 +81,7 @@ def build_table(
     stats_by_model: List[Tuple[str, Dict[str, QuestionStats]]],
     *,
     use_color: bool,
+    apm_by_model: List[Tuple[float, int, int]],
 ) -> ReportTable:
     if not stats_by_model:
         raise ValueError("No CSV data provided")
@@ -116,6 +117,15 @@ def build_table(
             row.append(cell)
         rows.append(row)
 
+    # Append summary row
+    summary = ["APM"]
+    for idx, (apm, correct, tokens) in enumerate(apm_by_model):
+        if tokens == 0:
+            summary.append("0.0")
+        else:
+            summary.append(f"{apm:.1f}")
+    rows.append(summary)
+
     return ReportTable(headers=headers, rows=rows, align=align)
 
 
@@ -144,9 +154,11 @@ def correct_suffix(correct: int, runs: int, *, use_color: bool) -> str:
 
 def render_report(csv_paths: Iterable[Path], *, use_color: bool = True) -> str:
     stats_by_model: List[Tuple[str, Dict[str, QuestionStats]]] = []
+    apm_by_model: List[Tuple[float, int, int]] = []
     for path in csv_paths:
         stats_by_model.append(load_stats(path))
-    table = build_table(stats_by_model, use_color=use_color)
+        apm_by_model.append(_compute_apm(path))
+    table = build_table(stats_by_model, use_color=use_color, apm_by_model=apm_by_model)
     return table.to_markdown()
 
 
@@ -164,6 +176,24 @@ def pad_display(text: str, width: int, align: str) -> str:
     if align == "right":
         return padding + text
     return text + padding
+
+
+def _compute_apm(csv_path: Path) -> Tuple[float, int, int]:
+    with csv_path.open(newline="") as handle:
+        reader = csv.DictReader(handle)
+        total_tokens = 0
+        total_correct = 0
+        for row in reader:
+            try:
+                total_tokens += int(row.get("output_tokens") or 0)
+            except ValueError:
+                pass
+            if row.get("correct") == "1":
+                total_correct += 1
+    if total_tokens == 0:
+        return 0.0, total_correct, total_tokens
+    apm = total_correct / (total_tokens / 1_000_000.0)
+    return apm, total_correct, total_tokens
 
 
 def _format_aime_id(qid: str) -> str:
