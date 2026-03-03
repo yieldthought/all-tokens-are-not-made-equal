@@ -82,6 +82,7 @@ def build_table(
     *,
     use_color: bool,
     apm_by_model: List[Tuple[float, int, int]],
+    tea_by_model: List[float],
 ) -> ReportTable:
     if not stats_by_model:
         raise ValueError("No CSV data provided")
@@ -119,12 +120,17 @@ def build_table(
 
     # Append summary row
     summary = ["APM"]
-    for idx, (apm, correct, tokens) in enumerate(apm_by_model):
+    for apm, _, tokens in apm_by_model:
         if tokens == 0:
             summary.append("0.0")
         else:
             summary.append(f"{apm:.1f}")
     rows.append(summary)
+
+    tea_row = ["TEA"]
+    for tea in tea_by_model:
+        tea_row.append(f"{tea:.3f}")
+    rows.append(tea_row)
 
     return ReportTable(headers=headers, rows=rows, align=align)
 
@@ -155,10 +161,17 @@ def correct_suffix(correct: int, runs: int, *, use_color: bool) -> str:
 def render_report(csv_paths: Iterable[Path], *, use_color: bool = True) -> str:
     stats_by_model: List[Tuple[str, Dict[str, QuestionStats]]] = []
     apm_by_model: List[Tuple[float, int, int]] = []
+    tea_by_model: List[float] = []
     for path in csv_paths:
         stats_by_model.append(load_stats(path))
         apm_by_model.append(_compute_apm(path))
-    table = build_table(stats_by_model, use_color=use_color, apm_by_model=apm_by_model)
+        tea_by_model.append(_compute_tea(path))
+    table = build_table(
+        stats_by_model,
+        use_color=use_color,
+        apm_by_model=apm_by_model,
+        tea_by_model=tea_by_model,
+    )
     return table.to_markdown()
 
 
@@ -194,6 +207,38 @@ def _compute_apm(csv_path: Path) -> Tuple[float, int, int]:
         return 0.0, total_correct, total_tokens
     apm = total_correct / (total_tokens / 1_000_000.0)
     return apm, total_correct, total_tokens
+
+
+def _compute_tea(csv_path: Path, *, budget: int = 32768) -> float:
+    # Token-Efficiency AUC: 1 - mean(min(correct_tokens, B))/B over questions.
+    per_q: Dict[str, List[Tuple[int, int]]] = {}
+    with csv_path.open(newline="") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            qid = row.get("question_id")
+            if not qid:
+                continue
+            try:
+                tokens = int(row.get("output_tokens") or 0)
+            except ValueError:
+                tokens = 0
+            correct = 1 if row.get("correct") == "1" else 0
+            per_q.setdefault(qid, []).append((tokens, correct))
+
+    if not per_q:
+        return 0.0
+
+    capped = []
+    for runs in per_q.values():
+        correct_tokens = [t for t, ok in runs if ok == 1]
+        if correct_tokens:
+            best = min(correct_tokens)
+            capped.append(min(best, budget))
+        else:
+            capped.append(budget)
+
+    mean_tokens = sum(capped) / len(capped)
+    return max(0.0, min(1.0, 1.0 - (mean_tokens / budget)))
 
 
 def _format_aime_id(qid: str) -> str:

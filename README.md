@@ -94,6 +94,27 @@ Notes:
 - Standard deviation uses population stdev (`pstdev`).
 - AIME24 dataset is loaded from `Maxwell-Jia/AIME_2024`.
 
+## Metrics
+
+**APM (Correct per Million Tokens)**  
+APM = total correct runs / (total output tokens / 1,000,000).
+
+**TEA (Token-Efficiency AUC)**  
+TEA is a single efficiency+accuracy score in [0, 1] that rewards solving quickly and penalizes slow or unsolved questions.
+
+Computation:
+1. For each question, take the **minimum output tokens** among the **correct runs**.
+2. If the question is never solved, treat it as using the full budget `B`.
+3. Compute the mean over questions, then normalize:
+   `TEA = 1 - mean(min(tokens_correct, B)) / B`.
+
+Intuition:
+- Solving a question quickly yields a high contribution.
+- Solving slowly still contributes, just less.
+- Never solving contributes 0.
+
+Default `B` is `32768` (matches the max generation token cap).
+
 ## Prompt policy
 
 Each question is sent with a strict prompt:
